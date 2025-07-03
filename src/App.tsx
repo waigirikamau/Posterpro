@@ -15,12 +15,22 @@ function App() {
   const [currentView, setCurrentView] = useState<'home' | 'editor' | 'dashboard'>('home');
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [selectedDesign, setSelectedDesign] = useState<any>(null);
+  const [appError, setAppError] = useState<string | null>(null);
 
   const { initialize, user } = useAuthStore();
   const { setCurrentDesign } = useDesignStore();
 
   useEffect(() => {
-    initialize();
+    const initializeApp = async () => {
+      try {
+        await initialize();
+      } catch (error) {
+        console.error('App initialization error:', error);
+        setAppError('Failed to initialize app. Running in demo mode.');
+      }
+    };
+    
+    initializeApp();
   }, [initialize]);
 
   const handleTemplateSelect = (template: any) => {
@@ -58,6 +68,24 @@ function App() {
     setSelectedDesign(null);
     setCurrentDesign(null);
   };
+
+  // Error boundary fallback
+  if (appError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 flex items-center justify-center">
+        <div className="text-center p-8">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">PosterPro</h1>
+          <p className="text-gray-600 mb-4">{appError}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700"
+          >
+            Reload App
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50">

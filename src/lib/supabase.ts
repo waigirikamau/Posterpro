@@ -5,12 +5,51 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 // Fallback for demo purposes - in production, these should be real values
 const defaultUrl = 'https://demo.supabase.co';
-const defaultKey = 'demo-key';
+const defaultKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
 
-export const supabase = createClient(
-  supabaseUrl || defaultUrl, 
-  supabaseAnonKey || defaultKey
-);
+let supabaseClient;
+
+try {
+  supabaseClient = createClient(
+    supabaseUrl || defaultUrl, 
+    supabaseAnonKey || defaultKey
+  );
+} catch (error) {
+  console.warn('Supabase client creation failed, using mock client:', error);
+  // Create a mock client for demo purposes
+  supabaseClient = {
+    auth: {
+      signInWithPassword: () => Promise.resolve({ error: new Error('Demo mode') }),
+      signUp: () => Promise.resolve({ error: new Error('Demo mode') }),
+      signOut: () => Promise.resolve({ error: null }),
+      getSession: () => Promise.resolve({ data: { session: null } }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      getUser: () => Promise.resolve({ data: { user: null } }),
+    },
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          single: () => Promise.resolve({ data: null, error: new Error('Demo mode') }),
+          order: () => Promise.resolve({ data: [], error: new Error('Demo mode') }),
+        }),
+        order: () => Promise.resolve({ data: [], error: new Error('Demo mode') }),
+      }),
+      insert: () => ({
+        select: () => ({
+          single: () => Promise.resolve({ data: null, error: new Error('Demo mode') }),
+        }),
+      }),
+      update: () => ({
+        eq: () => Promise.resolve({ error: new Error('Demo mode') }),
+      }),
+      delete: () => ({
+        eq: () => Promise.resolve({ error: new Error('Demo mode') }),
+      }),
+    }),
+  };
+}
+
+export const supabase = supabaseClient;
 
 // Types
 export interface Profile {
