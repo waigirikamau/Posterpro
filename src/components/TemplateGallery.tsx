@@ -1,14 +1,8 @@
-import React, { useState } from 'react';
-import { Search, Filter, Heart, Download } from 'lucide-react';
-
-interface Template {
-  id: string;
-  name: string;
-  category: string;
-  preview: string;
-  color: string;
-  popular: boolean;
-}
+import React, { useState, useEffect } from 'react';
+import { Search, Filter, Heart, Download, Crown } from 'lucide-react';
+import { useDesignStore } from '../stores/designStore';
+import { useAuthStore } from '../stores/authStore';
+import { Template } from '../lib/supabase';
 
 interface TemplateGalleryProps {
   onTemplateSelect: (template: Template) => void;
@@ -18,24 +12,25 @@ const TemplateGallery = ({ onTemplateSelect }: TemplateGalleryProps) => {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
 
+  const { templates, fetchTemplates } = useDesignStore();
+  const { profile } = useAuthStore();
+
+  useEffect(() => {
+    fetchTemplates();
+  }, [fetchTemplates]);
+
   const categories = ['All', 'Restaurant', 'Event', 'Beauty', 'Business', 'Sale', 'Service'];
-  
-  const templates: Template[] = [
-    { id: '1', name: 'Restaurant Special', category: 'Restaurant', preview: 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=400', color: 'from-red-500 to-orange-500', popular: true },
-    { id: '2', name: 'Grand Opening', category: 'Event', preview: 'https://images.pexels.com/photos/1190298/pexels-photo-1190298.jpeg?auto=compress&cs=tinysrgb&w=400', color: 'from-purple-500 to-pink-500', popular: true },
-    { id: '3', name: 'Beauty Salon', category: 'Beauty', preview: 'https://images.pexels.com/photos/3993449/pexels-photo-3993449.jpeg?auto=compress&cs=tinysrgb&w=400', color: 'from-pink-500 to-rose-500', popular: false },
-    { id: '4', name: 'Business Promo', category: 'Business', preview: 'https://images.pexels.com/photos/3184291/pexels-photo-3184291.jpeg?auto=compress&cs=tinysrgb&w=400', color: 'from-blue-500 to-cyan-500', popular: true },
-    { id: '5', name: 'Flash Sale', category: 'Sale', preview: 'https://images.pexels.com/photos/3962294/pexels-photo-3962294.jpeg?auto=compress&cs=tinysrgb&w=400', color: 'from-yellow-500 to-orange-500', popular: false },
-    { id: '6', name: 'Service Offer', category: 'Service', preview: 'https://images.pexels.com/photos/3184338/pexels-photo-3184338.jpeg?auto=compress&cs=tinysrgb&w=400', color: 'from-green-500 to-teal-500', popular: true },
-    { id: '7', name: 'Food Delivery', category: 'Restaurant', preview: 'https://images.pexels.com/photos/1640772/pexels-photo-1640772.jpeg?auto=compress&cs=tinysrgb&w=400', color: 'from-orange-500 to-red-500', popular: false },
-    { id: '8', name: 'Wedding Event', category: 'Event', preview: 'https://images.pexels.com/photos/1729931/pexels-photo-1729931.jpeg?auto=compress&cs=tinysrgb&w=400', color: 'from-purple-500 to-blue-500', popular: true },
-  ];
 
   const filteredTemplates = templates.filter(template => {
     const matchesCategory = selectedCategory === 'All' || template.category === selectedCategory;
     const matchesSearch = template.name.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCategory && matchesSearch;
   });
+
+  const canAccessTemplate = (template: Template) => {
+    if (!template.is_premium) return true;
+    return profile?.subscription_status === 'active' || profile?.credits_remaining > 0;
+  };
 
   return (
     <section id="templates" className="py-20 bg-white">
@@ -84,52 +79,94 @@ const TemplateGallery = ({ onTemplateSelect }: TemplateGalleryProps) => {
 
         {/* Template Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {filteredTemplates.map((template) => (
-            <div
-              key={template.id}
-              className="group bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden cursor-pointer transform hover:scale-105"
-              onClick={() => onTemplateSelect(template)}
-            >
-              <div className="relative">
-                <div className={`h-48 bg-gradient-to-br ${template.color} p-6 flex items-center justify-center`}>
-                  <img
-                    src={template.preview}
-                    alt={template.name}
-                    className="w-full h-full object-cover rounded-lg"
-                  />
-                </div>
-                
-                {template.popular && (
-                  <div className="absolute top-3 left-3 bg-yellow-400 text-black px-2 py-1 rounded-full text-xs font-bold">
-                    Popular
+          {filteredTemplates.map((template) => {
+            const canAccess = canAccessTemplate(template);
+            
+            return (
+              <div
+                key={template.id}
+                className={`group bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden cursor-pointer transform hover:scale-105 ${
+                  !canAccess ? 'opacity-75' : ''
+                }`}
+                onClick={() => canAccess && onTemplateSelect(template)}
+              >
+                <div className="relative">
+                  <div className={`h-48 bg-gradient-to-br ${template.color_scheme} p-6 flex items-center justify-center`}>
+                    {template.preview_url ? (
+                      <img
+                        src={template.preview_url}
+                        alt={template.name}
+                        className="w-full h-full object-cover rounded-lg"
+                      />
+                    ) : (
+                      <div className="text-white text-center">
+                        <h3 className="text-xl font-bold mb-2">{template.name}</h3>
+                        <p className="text-sm opacity-80">Preview Template</p>
+                      </div>
+                    )}
                   </div>
-                )}
-                
-                <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button className="bg-white/80 backdrop-blur-sm p-2 rounded-full hover:bg-white transition-colors">
-                    <Heart className="h-4 w-4 text-gray-700" />
-                  </button>
+                  
+                  {template.is_popular && (
+                    <div className="absolute top-3 left-3 bg-yellow-400 text-black px-2 py-1 rounded-full text-xs font-bold">
+                      Popular
+                    </div>
+                  )}
+
+                  {template.is_premium && (
+                    <div className="absolute top-3 right-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-2 py-1 rounded-full text-xs font-bold flex items-center space-x-1">
+                      <Crown className="h-3 w-3" />
+                      <span>Pro</span>
+                    </div>
+                  )}
+                  
+                  <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button className="bg-white/80 backdrop-blur-sm p-2 rounded-full hover:bg-white transition-colors">
+                      <Heart className="h-4 w-4 text-gray-700" />
+                    </button>
+                  </div>
+                  
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
+                    {canAccess ? (
+                      <button className="opacity-0 group-hover:opacity-100 bg-white text-purple-600 px-6 py-2 rounded-lg font-semibold transform translate-y-4 group-hover:translate-y-0 transition-all">
+                        Use Template
+                      </button>
+                    ) : (
+                      <div className="opacity-0 group-hover:opacity-100 bg-white text-gray-600 px-6 py-2 rounded-lg font-semibold transform translate-y-4 group-hover:translate-y-0 transition-all">
+                        <div className="flex items-center space-x-2">
+                          <Crown className="h-4 w-4" />
+                          <span>Premium Required</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all flex items-center justify-center">
-                  <button className="opacity-0 group-hover:opacity-100 bg-white text-purple-600 px-6 py-2 rounded-lg font-semibold transform translate-y-4 group-hover:translate-y-0 transition-all">
-                    Use Template
-                  </button>
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold text-lg text-gray-900">{template.name}</h3>
+                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                      {template.category}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-gray-500">
+                    <span>{template.usage_count} uses</span>
+                    {template.is_premium && !canAccess && (
+                      <div className="flex items-center space-x-1 text-orange-600">
+                        <Crown className="h-3 w-3" />
+                        <span>Premium</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-              
-              <div className="p-4">
-                <h3 className="font-semibold text-lg text-gray-900 mb-1">{template.name}</h3>
-                <p className="text-gray-500 text-sm">{template.category}</p>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="text-center mt-12">
-          <button className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-8 py-3 rounded-xl font-semibold hover:shadow-lg transform hover:scale-105 transition-all">
-            Load More Templates
-          </button>
+          <p className="text-gray-600 mb-4">
+            Can't find what you're looking for? More templates coming soon!
+          </p>
         </div>
       </div>
     </section>

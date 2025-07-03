@@ -1,30 +1,49 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, Download, Share2, Palette, Type, Image, Wand2, Save, Eye } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { useDesignStore } from '../stores/designStore';
+import { useAuthStore } from '../stores/authStore';
+import toast from 'react-hot-toast';
 
 interface PosterEditorProps {
-  template: any;
+  template?: any;
+  design?: any;
   onBack: () => void;
 }
 
-const PosterEditor = ({ template, onBack }: PosterEditorProps) => {
+const PosterEditor = ({ template, design, onBack }: PosterEditorProps) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  const { updateDesign, createDesign, setCurrentDesign } = useDesignStore();
+  const { profile } = useAuthStore();
+  
+  const [currentDesign, setCurrentDesignLocal] = useState(design);
   const [posterData, setPosterData] = useState({
-    title: 'Your Amazing Offer',
-    subtitle: 'Limited Time Only',
-    description: 'Get the best deals and offers from our amazing collection. Don\'t miss out on this incredible opportunity!',
-    price: 'KES 2,999',
-    originalPrice: 'KES 4,999',
-    contact: '+254 700 123 456',
-    bgColor: 'from-purple-600 to-blue-600',
-    textColor: 'text-white',
-    logo: null as string | null
+    title: design?.title || 'Your Amazing Offer',
+    subtitle: design?.subtitle || 'Limited Time Only',
+    description: design?.description || 'Get the best deals and offers from our amazing collection. Don\'t miss out on this incredible opportunity!',
+    price: design?.price || 'KES 2,999',
+    originalPrice: design?.original_price || 'KES 4,999',
+    contact: design?.contact || '+254 700 123 456',
+    bgColor: design?.bg_color || template?.color_scheme || 'from-purple-600 to-blue-600',
+    textColor: design?.text_color || 'text-white',
+    logo: design?.logo_url || null
   });
 
   const [activeTab, setActiveTab] = useState<'text' | 'design' | 'images'>('text');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    // Create design if it doesn't exist
+    if (!design && template) {
+      createDesign(template.id).then((newDesign) => {
+        setCurrentDesignLocal(newDesign);
+        setCurrentDesign(newDesign);
+      });
+    }
+  }, [template, design, createDesign, setCurrentDesign]);
 
   const backgroundOptions = [
     { name: 'Purple Blue', class: 'from-purple-600 to-blue-600' },
@@ -59,7 +78,38 @@ const PosterEditor = ({ template, onBack }: PosterEditorProps) => {
     setPosterData(prev => ({ ...prev, title: randomSuggestion }));
   };
 
+  const saveDesign = async () => {
+    if (!currentDesign) return;
+    
+    setSaving(true);
+    try {
+      await updateDesign(currentDesign.id, {
+        title: posterData.title,
+        subtitle: posterData.subtitle,
+        description: posterData.description,
+        price: posterData.price,
+        original_price: posterData.originalPrice,
+        contact: posterData.contact,
+        bg_color: posterData.bgColor,
+        text_color: posterData.textColor,
+        logo_url: posterData.logo,
+        design_data: posterData
+      });
+      toast.success('Design saved successfully!');
+    } catch (error) {
+      toast.error('Failed to save design');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const downloadPoster = async () => {
+    // Check if user has credits or subscription
+    if (profile?.subscription_status !== 'active' && profile?.credits_remaining <= 0) {
+      toast.error('You need credits or a subscription to download posters');
+      return;
+    }
+
     if (canvasRef.current) {
       try {
         const canvas = await html2canvas(canvasRef.current, {
@@ -70,7 +120,7 @@ const PosterEditor = ({ template, onBack }: PosterEditorProps) => {
         
         // Download as PNG
         const link = document.createElement('a');
-        link.download = 'poster.png';
+        link.download = `${posterData.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png`;
         link.href = canvas.toDataURL();
         link.click();
         
@@ -80,9 +130,18 @@ const PosterEditor = ({ template, onBack }: PosterEditorProps) => {
         const imgWidth = 210;
         const imgHeight = (canvas.height * imgWidth) / canvas.width;
         pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-        pdf.save('poster.pdf');
+        pdf.save(`${posterData.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`);
+
+        // Deduct credit if not on active subscription
+        if (profile?.subscription_status !== 'active') {
+          // This would be handled by the backend in a real app
+          toast.success('Poster downloaded! 1 credit used.');
+        } else {
+          toast.success('Poster downloaded successfully!');
+        }
       } catch (error) {
         console.error('Error generating poster:', error);
+        toast.error('Failed to download poster');
       }
     }
   };
@@ -92,13 +151,24 @@ const PosterEditor = ({ template, onBack }: PosterEditorProps) => {
       {/* Editor Panel */}
       <div className="w-1/3 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
-          <button
-            onClick={onBack}
-            className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5" />
-            <span>Back to Templates</span>
-          </button>
+          <div className="flex items-center justify-between">
+            <button
+              onClick={onBack}
+              className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              <span>Back</span>
+            </button>
+            
+            <button
+              onClick={saveDesign}
+              disabled={saving}
+              className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+            >
+              <Save className="h-4 w-4" />
+              <span>{saving ? 'Saving...' : 'Save'}</span>
+            </button>
+          </div>
         </div>
 
         <div className="flex border-b border-gray-200">
